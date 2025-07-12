@@ -1,0 +1,13 @@
+fastapi
+uvicorn
+sqlmodel
+psycopg2-binary
+python-jose[cryptography]
+passlib[bcrypt]
+python-multipart
+sentence-transformers
+numpy
+scikit-learn
+python-dotenv
+pydantic
+alembic
