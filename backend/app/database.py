@@ -4,7 +4,7 @@ import os
 
 load_dotenv()
 
-DATABASE_URL = os.getenv("DATABASE_URL", "postgresql://user:password@localhost:5432/workout_planner")
+DATABASE_URL = os.getenv("DATABASE_URL", "postgresql://user:your_password@localhost:5432/workout_planner")
 
 engine = create_engine(DATABASE_URL)
 
