@@ -151,7 +151,7 @@ class WorkoutPlannerService:
         
         # Create daily plans
         days = []
-        exercises_per_day = max(4, len(exercises) // days_per_week)
+        exercises_per_day = max(5, len(exercises) // days_per_week)
         
         for day in range(1, days_per_week + 1):
             day_exercises = []
