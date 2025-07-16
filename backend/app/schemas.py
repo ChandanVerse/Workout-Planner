@@ -40,7 +40,7 @@ class ExerciseInPlan(BaseModel):
     target_muscle: str
     equipment: str
     sets: int
-    reps: int
+    reps: Optional[int] = None
     duration: Optional[int] = None
     rest_time: Optional[int] = None
     order: int

@@ -4,8 +4,8 @@ from app.embeddings import embedding_service
 import json
 import random
 
-# Sample exercise data (in production, this would come from ExerciseDB API)
-SAMPLE_EXERCISES = [
+# CORRECTED: Explicitly type the list of dictionaries to allow for mixed value types (str and List[float])
+SAMPLE_EXERCISES: List[Dict[str, Any]] = [
     {
         "name": "Push-ups",
         "description": "Classic bodyweight exercise targeting chest, shoulders, and triceps",
@@ -90,73 +90,74 @@ SAMPLE_EXERCISES = [
 
 class WorkoutPlannerService:
     def __init__(self):
-        self.exercises = self._prepare_exercises()
+        # CORRECTED: Ensure the instance variable also has the correct, explicit type hint
+        self.exercises: List[Dict[str, Any]] = self._prepare_exercises()
     
-    def _prepare_exercises(self) -> List[Dict]:
+    # CORRECTED: The return type must match the explicit type hint used elsewhere
+    def _prepare_exercises(self) -> List[Dict[str, Any]]:
         """Prepare exercises with embeddings"""
-        exercises_with_embeddings = []
+        exercises_with_embeddings: List[Dict[str, Any]] = []
         for exercise in SAMPLE_EXERCISES:
             embedding = embedding_service.create_exercise_embedding(exercise)
             exercise_with_embedding = exercise.copy()
+            # This assignment is now valid because exercise_with_embedding is known to be Dict[str, Any]
             exercise_with_embedding['embedding'] = embedding
             exercises_with_embeddings.append(exercise_with_embedding)
         return exercises_with_embeddings
     
     def create_workout_plan(self, preferences: Dict[str, Any], user_id: int) -> Dict[str, Any]:
         """Create a workout plan based on user preferences"""
-        # Create query from preferences
         query = embedding_service.create_query_from_preferences(preferences)
         query_embedding = embedding_service.create_embedding(query)
         
-        # Filter exercises by available equipment
         available_equipment = [eq.lower() for eq in preferences.get('available_equipment', [])]
         if 'bodyweight' not in available_equipment:
-            available_equipment.append('bodyweight')  # Always include bodyweight
+            available_equipment.append('bodyweight')
         
         filtered_exercises = [
             ex for ex in self.exercises 
-            if ex['equipment'].lower() in available_equipment
+            if ex.get('equipment', '').lower() in available_equipment
         ]
         
-        # Find similar exercises
+        # CORRECTED: Ensure the type hint for exercise_embeddings is also explicit
+        exercise_embeddings: List[Dict[str, Any]] = [ex for ex in filtered_exercises if 'embedding' in ex]
+
         similar_exercises = embedding_service.find_similar_exercises(
-            query_embedding, filtered_exercises, top_k=20
+            query_embedding, exercise_embeddings, top_k=20
         )
         
         if not similar_exercises:
-            similar_exercises = filtered_exercises[:10]  # Fallback
+            similar_exercises = filtered_exercises[:10]
         
-        # Generate plan structure
         plan = self._generate_plan_structure(preferences, similar_exercises)
         
         return plan
     
-    def _generate_plan_structure(self, preferences: Dict[str, Any], exercises: List[Dict]) -> Dict[str, Any]:
+    # CORRECTED: The 'exercises' parameter needs the correct, explicit type hint
+    def _generate_plan_structure(self, preferences: Dict[str, Any], exercises: List[Dict[str, Any]]) -> Dict[str, Any]:
         """Generate the actual workout plan structure"""
         days_per_week = preferences.get('days_per_week', 3)
         session_duration = preferences.get('session_duration', 60)
         user_level = preferences.get('user_level', 'beginner')
         workout_type = preferences.get('workout_type', 'strength')
         
-        # Determine sets and reps based on user level and workout type
         if user_level == 'beginner':
             sets_range = (2, 3)
             reps_range = (8, 12)
         elif user_level == 'intermediate':
             sets_range = (3, 4)
             reps_range = (10, 15)
-        else:  # advanced
+        else:
             sets_range = (4, 5)
             reps_range = (12, 20)
         
-        # Create daily plans
         days = []
-        exercises_per_day = max(5, len(exercises) // days_per_week)
+        # Use max() to avoid division by zero if days_per_week is 0
+        exercises_per_day = max(5, len(exercises) // max(1, days_per_week))
         
         for day in range(1, days_per_week + 1):
             day_exercises = []
             
-            # Select exercises for this day
             start_idx = (day - 1) * exercises_per_day
             end_idx = start_idx + exercises_per_day
             day_exercise_list = exercises[start_idx:end_idx]
@@ -168,21 +169,21 @@ class WorkoutPlannerService:
                 sets = random.randint(*sets_range)
                 reps = random.randint(*reps_range)
                 
-                # For cardio exercises, use duration instead of reps
+                reps_val = reps
+                duration = None
+                
                 if workout_type == 'cardio' or 'cardio' in exercise.get('description', '').lower():
-                    duration = random.randint(30, 60)  # seconds
-                    reps = None
-                else:
-                    duration = None
+                    duration = random.randint(30, 60)
+                    reps_val = None
                 
                 day_exercises.append({
-                    'id': idx + 1,  # Temporary ID
+                    'id': idx + 1,
                     'name': exercise['name'],
                     'description': exercise['description'],
                     'target_muscle': exercise['target_muscle'],
                     'equipment': exercise['equipment'],
                     'sets': sets,
-                    'reps': reps,
+                    'reps': reps_val,
                     'duration': duration,
                     'rest_time': 60 if workout_type == 'strength' else 30,
                     'order': idx + 1
@@ -194,7 +195,7 @@ class WorkoutPlannerService:
             })
         
         return {
-            'id': 1,  # Temporary ID
+            'id': 1,
             'name': f"{preferences.get('workout_type', 'Custom').title()} Workout Plan",
             'description': f"A {days_per_week}-day {preferences.get('workout_type', 'custom')} workout plan",
             'days_per_week': days_per_week,

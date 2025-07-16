@@ -16,6 +16,9 @@ async def create_workout_plan(
 ):
     """Generate a workout plan based on user preferences"""
     try:
+        # Add an assertion to ensure the user ID is not None
+        assert current_user.id is not None, "User ID cannot be None"
+
         # Convert request to dictionary
         preferences = {
             'focus_areas': plan_request.focus_areas,

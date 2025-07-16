@@ -1,12 +1,12 @@
 import React, { useState } from 'react';
 import { Link, useNavigate } from 'react-router-dom';
 import { authAPI } from '../api';
-import { setToken } from '../utils/auth';
 
-const Login = () => {
+const Register = () => {
   const [formData, setFormData] = useState({
     email: '',
-    password: ''
+    password: '',
+    full_name: ''
   });
   const [error, setError] = useState('');
   const [loading, setLoading] = useState(false);
@@ -25,11 +25,10 @@ const Login = () => {
     setError('');
 
     try {
-      const response = await authAPI.login(formData);
-      setToken(response.data.access_token);
-      navigate('/workout');
+      await authAPI.register(formData);
+      navigate('/login');
     } catch (err) {
-      setError(err.response?.data?.detail || 'Login failed');
+      setError(err.response?.data?.detail || 'Registration failed');
     } finally {
       setLoading(false);
     }
@@ -38,9 +37,20 @@ const Login = () => {
   return (
     <div className="auth-container">
       <div className="auth-card">
-        <h2>Login</h2>
+        <h2>Register</h2>
         {error && <div className="error-message">{error}</div>}
         <form onSubmit={handleSubmit}>
+          <div className="form-group">
+            <label htmlFor="full_name">Full Name</label>
+            <input
+              type="text"
+              id="full_name"
+              name="full_name"
+              value={formData.full_name}
+              onChange={handleChange}
+              required
+            />
+          </div>
           <div className="form-group">
             <label htmlFor="email">Email</label>
             <input
@@ -64,15 +74,15 @@ const Login = () => {
             />
           </div>
           <button type="submit" disabled={loading}>
-            {loading ? 'Logging in...' : 'Login'}
+            {loading ? 'Registering...' : 'Register'}
           </button>
         </form>
         <p>
-          Don't have an account? <Link to="/register">Register here</Link>
+          Already have an account? <Link to="/login">Login here</Link>
         </p>
       </div>
     </div>
   );
 };
 
-export default Login;
+export default Register;

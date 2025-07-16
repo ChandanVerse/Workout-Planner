@@ -1,6 +1,6 @@
 from fastapi import APIRouter, Depends, HTTPException
 from sqlmodel import Session, select
-from typing import List
+from typing import List, Set, TypedDict
 from datetime import datetime, timedelta
 from app.database import get_session
 from app.models import User, WorkoutLog, Exercise
@@ -9,6 +9,13 @@ from app.auth.utils import get_current_user
 from collections import defaultdict
 
 router = APIRouter(prefix="/api/progress", tags=["progress"])
+
+# Define a TypedDict for more precise type hinting in the defaultdict
+class DailyStat(TypedDict):
+    workouts_count: int
+    total_duration: int
+    muscle_groups: Set[str]
+
 
 @router.post("/log", response_model=WorkoutLogResponse)
 async def log_workout(
@@ -23,6 +30,9 @@ async def log_workout(
         if not exercise:
             raise HTTPException(status_code=404, detail="Exercise not found")
         
+        # Assert that the user ID is not None to satisfy the type checker
+        assert current_user.id is not None, "Current user must have a valid ID"
+
         # Create workout log
         workout_log = WorkoutLog(
             user_id=current_user.id,
@@ -37,6 +47,8 @@ async def log_workout(
         session.add(workout_log)
         session.commit()
         session.refresh(workout_log)
+        
+        assert workout_log.id is not None, "Workout log ID should not be None after database refresh"
         
         return WorkoutLogResponse(
             id=workout_log.id,
@@ -53,6 +65,7 @@ async def log_workout(
     except Exception as e:
         raise HTTPException(status_code=500, detail=f"Error logging workout: {str(e)}")
 
+
 @router.get("/history", response_model=List[ProgressHistory])
 async def get_progress_history(
     days: int = 7,
@@ -61,6 +74,9 @@ async def get_progress_history(
 ):
     """Get workout history for the past N days"""
     try:
+        # Assert that the user ID is not None
+        assert current_user.id is not None, "Current user must have a valid ID"
+
         # Calculate date range
         end_date = datetime.utcnow()
         start_date = end_date - timedelta(days=days)
@@ -74,12 +90,8 @@ async def get_progress_history(
         
         results = session.exec(statement).all()
         
-        # Group by date
-        daily_stats = defaultdict(lambda: {
-            'workouts_count': 0,
-            'total_duration': 0,
-            'muscle_groups': set()
-        })
+        # Use the strongly-typed DailyStat for the defaultdict
+        daily_stats = defaultdict(lambda: DailyStat(workouts_count=0, total_duration=0, muscle_groups=set()))
         
         for log, exercise in results:
             date_str = log.completed_at.strftime('%Y-%m-%d')
@@ -98,13 +110,13 @@ async def get_progress_history(
                 muscle_groups=list(stats['muscle_groups'])
             ))
         
-        # Sort by date
         history.sort(key=lambda x: x.date)
         
         return history
         
     except Exception as e:
         raise HTTPException(status_code=500, detail=f"Error fetching progress history: {str(e)}")
+
 
 @router.get("/stats", response_model=ProgressStats)
 async def get_progress_stats(
@@ -113,6 +125,9 @@ async def get_progress_stats(
 ):
     """Get overall progress statistics"""
     try:
+        # Assert that the user ID is not None
+        assert current_user.id is not None, "Current user must have a valid ID"
+
         # Query all workout logs for user
         statement = select(WorkoutLog, Exercise).join(Exercise).where(
             WorkoutLog.user_id == current_user.id
@@ -122,7 +137,7 @@ async def get_progress_stats(
         
         total_workouts = len(results)
         total_time_minutes = 0
-        muscle_groups = set()
+        muscle_groups: Set[str] = set()
         
         for log, exercise in results:
             if log.duration_completed:

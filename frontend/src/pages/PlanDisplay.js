@@ -5,7 +5,10 @@ import { showError, showSuccess } from '../utils/notifications';
 const PlanDisplay = ({ planId }) => {
   const [plan, setPlan] = useState(null);
   const [loading, setLoading] = useState(true);
-  const [completedExercises, setCompletedExercises] = useState(new Set());
+  // Load completed exercises from localStorage, or start with an empty set
+  const [completedExercises, setCompletedExercises] = useState(
+    new Set(JSON.parse(localStorage.getItem(`completed_plan_${planId}`) || '[]'))
+  );
   const [expandedDays, setExpandedDays] = useState(new Set());
 
   useEffect(() => {
@@ -14,13 +17,20 @@ const PlanDisplay = ({ planId }) => {
     }
   }, [planId]);
 
+  // Save completed exercises to localStorage whenever they change
+  useEffect(() => {
+    localStorage.setItem(
+      `completed_plan_${planId}`,
+      JSON.stringify(Array.from(completedExercises))
+    );
+  }, [completedExercises, planId]);
+
   const fetchPlan = async () => {
     try {
       setLoading(true);
       const response = await apiClient.get(`/plans/${planId}`);
       setPlan(response.data);
       
-      // Initialize expanded days (expand first day by default)
       if (response.data.exercises && Object.keys(response.data.exercises).length > 0) {
         setExpandedDays(new Set([Object.keys(response.data.exercises)[0]]));
       }

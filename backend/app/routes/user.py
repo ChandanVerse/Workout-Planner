@@ -7,6 +7,9 @@ router = APIRouter(prefix="/api/user", tags=["user"])
 
 @router.get("/me", response_model=UserResponse)
 async def get_current_user_info(current_user: User = Depends(get_current_user)):
+    # Add an assertion to ensure current_user.id is not None
+    assert current_user.id is not None, "User ID should not be None"
+    
     return UserResponse(
         id=current_user.id,
         email=current_user.email,

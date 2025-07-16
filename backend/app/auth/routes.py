@@ -29,6 +29,9 @@ async def register(user_data: UserCreate, session: Session = Depends(get_session
     session.add(user)
     session.commit()
     session.refresh(user)
+
+    # Add an assertion to ensure user.id is not None
+    assert user.id is not None, "User ID should not be None after database refresh"
     
     return UserResponse(
         id=user.id,

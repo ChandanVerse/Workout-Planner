@@ -38,10 +38,16 @@ def create_access_token(data: dict, expires_delta: Optional[timedelta] = None):
 def verify_token(token: str) -> Optional[str]:
     try:
         payload = jwt.decode(token, SECRET_KEY, algorithms=[ALGORITHM])
-        email: str = payload.get("sub")
-        if email is None:
+        
+        # Get the 'sub' claim, which could be None
+        email_claim = payload.get("sub")
+        
+        # Check if the claim is present and is a string
+        if email_claim is None or not isinstance(email_claim, str):
             return None
-        return email
+            
+        return email_claim
+        
     except JWTError:
         return None
 
