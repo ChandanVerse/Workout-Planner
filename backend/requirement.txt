@@ -11,3 +11,4 @@ scikit-learn
 python-dotenv
 pydantic
 alembic
+gunicorn
