@@ -17,6 +17,8 @@ if 'user_info' not in st.session_state:
     st.session_state.user_info = None
 if 'current_plan' not in st.session_state:
     st.session_state.current_plan = None
+if 'active_tab' not in st.session_state:
+    st.session_state.active_tab = "Dashboard"
 
 class WorkoutPlannerAPI:
     def __init__(self, base_url: str):
@@ -202,6 +204,7 @@ def show_workout_plan_generator():
                     if "error" not in plan:
                         st.session_state.current_plan = plan
                         st.success("Workout plan generated successfully!")
+                        st.session_state.active_tab = "Current Plan"
                         st.rerun()
                     else:
                         st.error(plan["error"])
@@ -404,6 +407,43 @@ def show_progress_tracking():
     else:
         st.info("No workout history found. Start logging your workouts to see progress!")
 
+def show_dashboard():
+    st.title("🏠 Dashboard")
+    st.markdown("---")
+    
+    # Quick stats
+    stats = api.get_progress_stats()
+    if "error" not in stats and stats['total_workouts'] > 0:
+        col1, col2, col3 = st.columns(3)
+        with col1:
+            st.metric("Total Workouts", stats['total_workouts'])
+        with col2:
+            st.metric("This Week", f"{stats['avg_workouts_per_week']:.1f}")
+        with col3:
+            st.metric("Total Time", f"{stats['total_time_minutes']} min")
+    
+    # Recent activity
+    st.subheader("Recent Activity")
+    recent_history = api.get_progress_history(7)
+    if recent_history:
+        for day in recent_history[-3:]:  # Show last 3 days
+            if day['workouts_count'] > 0:
+                st.markdown(f"**{day['date']}**: {day['workouts_count']} workouts, {day['total_duration']}s total")
+    else:
+        st.info("No recent activity. Start working out to see your progress!")
+    
+    # Quick actions
+    st.subheader("Quick Actions")
+    col1, col2 = st.columns(2)
+    with col1:
+        if st.button("🆕 Create New Plan", use_container_width=True):
+            st.session_state.active_tab = "Create Plan"
+            st.rerun()
+    with col2:
+        if st.button("📝 Log Workout", use_container_width=True):
+            st.session_state.active_tab = "Current Plan"
+            st.rerun()
+
 def show_sidebar():
     with st.sidebar:
         st.markdown("### 👋 Welcome!")
@@ -416,6 +456,7 @@ def show_sidebar():
             st.session_state.token = None
             st.session_state.user_info = None
             st.session_state.current_plan = None
+            st.session_state.active_tab = "Dashboard"
             st.rerun()
 
 def main():
@@ -448,51 +489,34 @@ def main():
     else:
         show_sidebar()
         
-        # Main navigation
-        tab1, tab2, tab3, tab4 = st.tabs(["🏠 Dashboard", "💪 Create Plan", "📋 Current Plan", "📊 Progress"])
+        # Main navigation using session state instead of tabs
+        tab_options = ["Dashboard", "Create Plan", "Current Plan", "Progress"]
         
-        with tab1:
-            st.title("🏠 Dashboard")
-            st.markdown("---")
-            
-            # Quick stats
-            stats = api.get_progress_stats()
-            if "error" not in stats and stats['total_workouts'] > 0:
-                col1, col2, col3 = st.columns(3)
-                with col1:
-                    st.metric("Total Workouts", stats['total_workouts'])
-                with col2:
-                    st.metric("This Week", f"{stats['avg_workouts_per_week']:.1f}")
-                with col3:
-                    st.metric("Total Time", f"{stats['total_time_minutes']} min")
-            
-            # Recent activity
-            st.subheader("Recent Activity")
-            recent_history = api.get_progress_history(7)
-            if recent_history:
-                for day in recent_history[-3:]:  # Show last 3 days
-                    if day['workouts_count'] > 0:
-                        st.markdown(f"**{day['date']}**: {day['workouts_count']} workouts, {day['total_duration']}s total")
-            else:
-                st.info("No recent activity. Start working out to see your progress!")
-            
-            # Quick actions
-            st.subheader("Quick Actions")
-            col1, col2 = st.columns(2)
-            with col1:
-                if st.button("🆕 Create New Plan", use_container_width=True):
-                    st.switch_page("Create Plan")
-            with col2:
-                if st.button("📝 Log Workout", use_container_width=True):
-                    st.switch_page("Current Plan")
+        # Create buttons for navigation
+        col1, col2, col3, col4 = st.columns(4)
+        with col1:
+            if st.button("🏠 Dashboard", use_container_width=True):
+                st.session_state.active_tab = "Dashboard"
+        with col2:
+            if st.button("💪 Create Plan", use_container_width=True):
+                st.session_state.active_tab = "Create Plan"
+        with col3:
+            if st.button("📋 Current Plan", use_container_width=True):
+                st.session_state.active_tab = "Current Plan"
+        with col4:
+            if st.button("📊 Progress", use_container_width=True):
+                st.session_state.active_tab = "Progress"
         
-        with tab2:
+        st.markdown("---")
+        
+        # Show content based on active tab
+        if st.session_state.active_tab == "Dashboard":
+            show_dashboard()
+        elif st.session_state.active_tab == "Create Plan":
             show_workout_plan_generator()
-        
-        with tab3:
+        elif st.session_state.active_tab == "Current Plan":
             show_current_plan()
-        
-        with tab4:
+        elif st.session_state.active_tab == "Progress":
             show_progress_tracking()
 
 if __name__ == "__main__":

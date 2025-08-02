@@ -1,139 +1,95 @@
 from typing import List, Dict, Any
-from app.models import WorkoutType, UserLevel, Exercise, WorkoutPlan, WorkoutPlanExercise
+from app.models import WorkoutType, UserLevel, Exercise
 from app.embeddings import embedding_service
+from sqlmodel import Session, select
+from app.database import get_session
 import json
 import random
 
-# CORRECTED: Explicitly type the list of dictionaries to allow for mixed value types (str and List[float])
-SAMPLE_EXERCISES: List[Dict[str, Any]] = [
-    {
-        "name": "Push-ups",
-        "description": "Classic bodyweight exercise targeting chest, shoulders, and triceps",
-        "target_muscle": "chest",
-        "equipment": "bodyweight",
-        "difficulty": "beginner",
-        "instructions": "Start in plank position, lower body until chest nearly touches ground, push back up"
-    },
-    {
-        "name": "Squats",
-        "description": "Fundamental lower body exercise targeting quads, glutes, and hamstrings",
-        "target_muscle": "legs",
-        "equipment": "bodyweight",
-        "difficulty": "beginner",
-        "instructions": "Stand with feet shoulder-width apart, lower hips back and down, return to standing"
-    },
-    {
-        "name": "Dumbbell Bench Press",
-        "description": "Chest exercise using dumbbells for upper body strength",
-        "target_muscle": "chest",
-        "equipment": "dumbbells",
-        "difficulty": "intermediate",
-        "instructions": "Lie on bench, press dumbbells up from chest level, lower with control"
-    },
-    {
-        "name": "Deadlifts",
-        "description": "Compound movement targeting posterior chain muscles",
-        "target_muscle": "back",
-        "equipment": "barbell",
-        "difficulty": "intermediate",
-        "instructions": "Stand with feet hip-width apart, hinge at hips, lower bar to ground, return to standing"
-    },
-    {
-        "name": "Plank",
-        "description": "Core stabilization exercise",
-        "target_muscle": "core",
-        "equipment": "bodyweight",
-        "difficulty": "beginner",
-        "instructions": "Hold rigid position on forearms and toes, maintain straight line from head to heels"
-    },
-    {
-        "name": "Dumbbell Rows",
-        "description": "Back exercise using dumbbells",
-        "target_muscle": "back",
-        "equipment": "dumbbells",
-        "difficulty": "beginner",
-        "instructions": "Bend over, pull dumbbells to sides of torso, lower with control"
-    },
-    {
-        "name": "Lunges",
-        "description": "Unilateral leg exercise",
-        "target_muscle": "legs",
-        "equipment": "bodyweight",
-        "difficulty": "beginner",
-        "instructions": "Step forward into lunge position, lower back knee toward ground, return to standing"
-    },
-    {
-        "name": "Burpees",
-        "description": "Full-body cardio exercise",
-        "target_muscle": "full body",
-        "equipment": "bodyweight",
-        "difficulty": "intermediate",
-        "instructions": "Squat down, jump back to plank, do push-up, jump feet to hands, jump up"
-    },
-    {
-        "name": "Dumbbell Shoulder Press",
-        "description": "Overhead pressing movement for shoulders",
-        "target_muscle": "shoulders",
-        "equipment": "dumbbells",
-        "difficulty": "beginner",
-        "instructions": "Press dumbbells overhead from shoulder level, lower with control"
-    },
-    {
-        "name": "Mountain Climbers",
-        "description": "Dynamic cardio and core exercise",
-        "target_muscle": "core",
-        "equipment": "bodyweight",
-        "difficulty": "intermediate",
-        "instructions": "Start in plank, alternate bringing knees to chest quickly"
-    }
-]
-
 class WorkoutPlannerService:
     def __init__(self):
-        # CORRECTED: Ensure the instance variable also has the correct, explicit type hint
-        self.exercises: List[Dict[str, Any]] = self._prepare_exercises()
+        pass
     
-    # CORRECTED: The return type must match the explicit type hint used elsewhere
-    def _prepare_exercises(self) -> List[Dict[str, Any]]:
-        """Prepare exercises with embeddings"""
-        exercises_with_embeddings: List[Dict[str, Any]] = []
-        for exercise in SAMPLE_EXERCISES:
-            embedding = embedding_service.create_exercise_embedding(exercise)
-            exercise_with_embedding = exercise.copy()
-            # This assignment is now valid because exercise_with_embedding is known to be Dict[str, Any]
-            exercise_with_embedding['embedding'] = embedding
-            exercises_with_embeddings.append(exercise_with_embedding)
-        return exercises_with_embeddings
+    def _get_exercises_from_db(self, session: Session) -> List[Dict[str, Any]]:
+        """Get exercises from database and convert to dict format"""
+        statement = select(Exercise)
+        exercises = session.exec(statement).all()
+        
+        exercises_list = []
+        for exercise in exercises:
+            exercise_dict = {
+                "id": exercise.id,
+                "name": exercise.name,
+                "description": exercise.description,
+                "target_muscle": exercise.target_muscle,
+                "equipment": exercise.equipment,
+                "difficulty": exercise.difficulty,
+                "instructions": exercise.instructions
+            }
+            
+            # Parse embedding if it exists
+            if exercise.embedding:
+                try:
+                    embedding = json.loads(exercise.embedding)
+                    exercise_dict['embedding'] = embedding
+                except json.JSONDecodeError:
+                    exercise_dict['embedding'] = []
+            else:
+                exercise_dict['embedding'] = []
+            
+            exercises_list.append(exercise_dict)
+        
+        return exercises_list
     
     def create_workout_plan(self, preferences: Dict[str, Any], user_id: int) -> Dict[str, Any]:
         """Create a workout plan based on user preferences"""
-        query = embedding_service.create_query_from_preferences(preferences)
-        query_embedding = embedding_service.create_embedding(query)
+        # Get a database session
+        session_gen = get_session()
+        session = next(session_gen)
         
-        available_equipment = [eq.lower() for eq in preferences.get('available_equipment', [])]
-        if 'bodyweight' not in available_equipment:
-            available_equipment.append('bodyweight')
-        
-        filtered_exercises = [
-            ex for ex in self.exercises 
-            if ex.get('equipment', '').lower() in available_equipment
-        ]
-        
-        # CORRECTED: Ensure the type hint for exercise_embeddings is also explicit
-        exercise_embeddings: List[Dict[str, Any]] = [ex for ex in filtered_exercises if 'embedding' in ex]
-
-        similar_exercises = embedding_service.find_similar_exercises(
-            query_embedding, exercise_embeddings, top_k=20
-        )
-        
-        if not similar_exercises:
-            similar_exercises = filtered_exercises[:10]
-        
-        plan = self._generate_plan_structure(preferences, similar_exercises)
-        
-        return plan
+        try:
+            # Get exercises from database
+            exercises = self._get_exercises_from_db(session)
+            
+            if not exercises:
+                return {"error": "No exercises found in database. Please seed the database first."}
+            
+            query = embedding_service.create_query_from_preferences(preferences)
+            query_embedding = embedding_service.create_embedding(query)
+            
+            available_equipment = [eq.lower() for eq in preferences.get('available_equipment', [])]
+            if 'bodyweight' not in available_equipment:
+                available_equipment.append('bodyweight')
+            
+            # Filter exercises by available equipment
+            filtered_exercises = [
+                ex for ex in exercises 
+                if ex.get('equipment', '').lower() in available_equipment
+            ]
+            
+            if not filtered_exercises:
+                filtered_exercises = exercises  # Fallback to all exercises
+            
+            # Find similar exercises if embeddings are available
+            exercise_embeddings = [ex for ex in filtered_exercises if ex.get('embedding')]
+            
+            if query_embedding and exercise_embeddings:
+                similar_exercises = embedding_service.find_similar_exercises(
+                    query_embedding, exercise_embeddings, top_k=20
+                )
+            else:
+                similar_exercises = filtered_exercises[:20]
+            
+            if not similar_exercises:
+                similar_exercises = filtered_exercises[:10]
+            
+            plan = self._generate_plan_structure(preferences, similar_exercises)
+            
+            return plan
+            
+        finally:
+            session.close()
     
-    # CORRECTED: The 'exercises' parameter needs the correct, explicit type hint
     def _generate_plan_structure(self, preferences: Dict[str, Any], exercises: List[Dict[str, Any]]) -> Dict[str, Any]:
         """Generate the actual workout plan structure"""
         days_per_week = preferences.get('days_per_week', 3)
@@ -152,12 +108,12 @@ class WorkoutPlannerService:
             reps_range = (12, 20)
         
         days = []
-        # Use max() to avoid division by zero if days_per_week is 0
-        exercises_per_day = max(5, len(exercises) // max(1, days_per_week))
+        exercises_per_day = max(4, len(exercises) // max(1, days_per_week))
         
         for day in range(1, days_per_week + 1):
             day_exercises = []
             
+            # Get exercises for this day
             start_idx = (day - 1) * exercises_per_day
             end_idx = start_idx + exercises_per_day
             day_exercise_list = exercises[start_idx:end_idx]
@@ -177,7 +133,7 @@ class WorkoutPlannerService:
                     reps_val = None
                 
                 day_exercises.append({
-                    'id': idx + 1,
+                    'id': exercise['id'],  # Use actual database ID
                     'name': exercise['name'],
                     'description': exercise['description'],
                     'target_muscle': exercise['target_muscle'],
